@@ -2,14 +2,16 @@ const puppeteer = require('puppeteer');
 const mongoose = require('mongoose');
 const cron = require('node-cron');
 const Call = require('./Call');
+const dotenv = require('dotenv');
 var moment = require('moment');
-require('dotenv').config();
+dotenv.config();
+
 const {Client} = require("@googlemaps/google-maps-services-js");
 
 
-
-// mongoose.set('debug', true);
 mongoose.connect(process.env.CONNSTRING);
+
+
 
 const client = new Client({});
 
@@ -173,9 +175,7 @@ function sanitizeAddy(address){
 function dateFormatting(input)
 {
     let dateregex = new RegExp(/([0-9]+(\/[0-9]+)+)/);
-    // let timeregex = new RegExp("([0-9]+(:[0-9]+)+)\s[a-zA-Z]+");
     let timeregex = new RegExp(/([0-9]+(:[0-9]+)+)\s+[a-zA-Z]+/);
-
 
     let date = input.match(dateregex);
     let time = input.match(timeregex)[0];
@@ -192,7 +192,7 @@ function delay(time) {
     });
  }
 
-// crawl();
+crawl();
 // cron.schedule("*/5 * * * *", crawl);
 
 module.exports = {crawl};
