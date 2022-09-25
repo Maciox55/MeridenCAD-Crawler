@@ -4,46 +4,118 @@ const cron = require('node-cron');
 const Call = require('./Call');
 const dotenv = require('dotenv');
 var moment = require('moment');
+// const request = require('request');
+const request = require("request-promise");
 dotenv.config();
 
 const {Client} = require("@googlemaps/google-maps-services-js");
+const client = new Client({});
 
 
 mongoose.connect(process.env.CONNSTRING);
 
 
 
-const client = new Client({});
+const activeCallsRequest = {
+    method: 'POST',
+    url: 'http://www.meridenp2c.com/cad/cadHandler.ashx',
+    qs: {op: 's'},
+    headers: {
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      'Accept-Language': 'en-US,en;q=0.7',
+      Connection: 'keep-alive',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: 'ASP.NET_SessionId=tinttk55myl0xo5c4tkkhzdj',
+      Origin: 'http://www.meridenp2c.com',
+      Referer: 'http://www.meridenp2c.com/cad/currentcalls.aspx',
+      'Sec-GPC': '1',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    form: {
+      t: 'ccc',
+      _search: 'false',
+      nd: '1663908908813',
+      rows: '10000',
+      page: '1',
+      sidx: 'starttime',
+      sord: 'desc'
+    }
+  };
+
+  const closedCallsRequest = {
+    method: 'POST',
+    url: 'http://www.meridenp2c.com/cad/cadHandler.ashx',
+    qs: {op: 's'},
+    headers: {
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      'Accept-Language': 'en-US,en;q=0.7',
+      Connection: 'keep-alive',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      Cookie: 'ASP.NET_SessionId=tinttk55myl0xo5c4tkkhzdj',
+      Origin: 'http://www.meridenp2c.com',
+      Referer: 'http://www.meridenp2c.com/cad/callsnapshot.aspx',
+      'Sec-GPC': '1',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    form: {
+      t: 'css',
+      _search: 'false',
+      nd: '1663907425468',
+      rows: '10000',
+      page: '1',
+      sidx: 'starttime',
+      sord: 'desc'
+    }
+  };
+  
+
 
 async function crawl() {
-    const browser = await puppeteer.launch({ headless: true, muteAudio: true });
+    // const browser = await puppeteer.launch({ headless: true, muteAudio: true });
 
-    const page = await browser.newPage();
+    // const page = await browser.newPage();
 
-    //TODO: Make crawl functions have callbacks.
-    var activeCalls = await getCADCalls(page);
-    var closedCalls = await getClosedCalls(page);
+
+    let activeCalls = await getCADCalls();
+    let closedCalls = await getClosedCalls();
     console.log("ACTIVE CALLS ");
+    let parsedActive = JSON.parse(activeCalls);
+    let parsedClosed = JSON.parse(closedCalls)
+    // console.log(parsedClosed.rows);
+
 
     try {
-        for (var i = 0; i < activeCalls.length; i++) {
-            let call = new Call(activeCalls[i]);
-            call.start = dateFormatting(activeCalls[i].start);
-            call.address = sanitizeAddy(call.address);
+        for (var i = 0; i < parsedActive.rows.length; i++) {
+            // console.log(activeCalls[i]);
+            let c = {
+                                agency: parsedActive.rows[i].agency,
+                                service: parsedActive.rows[i].service,
+                                case: parsedActive.rows[i].id,
+                                start: parsedActive.rows[i].starttime,
+                                nature: parsedActive.rows[i].nature,
+                                address: parsedActive.rows[i].address
+                            }
+
+            let call = new Call(c);
+            call.start = dateFormatting(c.start);
+            call.address = sanitizeAddy(c.address);
+
             let found = await Call.findOne({ case: call.case });
             if (found) {
                 
                 if(found.coordinates.latitude == null)
                 {
                     
-                    // geocode(call.address).then((geo)=>{
-                    //     // console.log(geo.data.results[0].geometry);
-                    //     found.coordinates.latitude = geo.data.results[0].geometry.location.lat;
-                    //     found.coordinates.longitude = geo.data.results[0].geometry.location.lng;
-                    //     found.formatted_address = geo.data.results[0].formatted_address;
-                    //     // console.log(geo.data.results[0].address_components);
-                    //     found.save();
-                    // });
+                    geocode(call.address).then((geo)=>{
+                        // console.log(geo.data.results[0].geometry);
+                        found.coordinates.latitude = geo.data.results[0].geometry.location.lat;
+                        found.coordinates.longitude = geo.data.results[0].geometry.location.lng;
+                        found.formatted_address = geo.data.results[0].formatted_address;
+                        // console.log(geo.data.results[0].address_components);
+                        found.save();
+                    });
                 }
                 // console.log(geo.geometry);
                 console.log("Active case already in DB");
@@ -64,98 +136,65 @@ async function crawl() {
             // console.log(call);
         }
         console.log("CLOSED CALLS ");
-        for (var i = 0; i < closedCalls.length; i++) {
-            var call = new Call(closedCalls[i]);
-            call.address = sanitizeAddy(call.address);
+        for (var i = 0; i < parsedClosed.rows.length; i++) {
+
+            let c = {
+                agency: parsedClosed.rows[i].agency,
+                service: parsedClosed.rows[i].service,
+                case: parsedClosed.rows[i].id,
+                start: parsedClosed.rows[i].starttime,
+                end: parsedClosed.rows[i].closetime,
+                nature: parsedClosed.rows[i].nature,
+                address: parsedClosed.rows[i].address
+            }
+
+
+            // console.log(closedCalls[i]);
+            var call = new Call(c);
+            call.address = sanitizeAddy(c.address);
             
             let found = await Call.findOne({ case: call.case });
             if (found) {
                 //Check if found call contains the end time, if true it means the previously active call was closed.
                 if (!found.end && call.end) {
                     // console.log(found.id + ": " + found.end + " " + call.end);
-                    call.end = dateFormatting(closedCalls[i].end);
+                    call.end = dateFormatting(c.end);
                     Call.updateOne({_id:found.id}, {$set:{end:call.end}}, { new: true, upsert: false, remove: {}, fields: {} }).then((newcall) => {
                         console.log(found.case+ ": Updated");
                     });
                 }
             } else {
-                call.start = dateFormatting(closedCalls[i].start);
-                call.end = dateFormatting(closedCalls[i].end);
+                call.start = dateFormatting(c.start);
+                call.end = dateFormatting(c.end);
                 
                 
                 call.save();
                 console.log("Case: " + call.case + " Inserted");
             }
             // console.log(call);
-            await browser.close();
+            // await browser.close();
         }
     } catch(e) {
         console.log(e);
-        await browser.close();
+        // await browser.close();
     }
 
 };
 
-//Active Calls Scraping
-async function getCADCalls(page) {
+async function getClosedCalls(){
     console.log("Getting Current Dispatch Calls...");
+    let calls = [];
 
-    await page.goto('http://www.meridenp2c.com/cad/currentcalls.aspx', { waitUntil: 'networkidle2' });
-    await page.select('#pager_center > table > tbody > tr > td:nth-child(5) > select', '10000');
-    
-    // await page.waitForNavigation();
+    return request(closedCallsRequest);
 
-    return await page.evaluate(() => {
-        var rows = Array.from(document.querySelectorAll("#tblDB > tbody> tr"));
-        var calls = [];
-        rows.forEach(element => {
-
-            var p = element.children;
-
-            let call = {
-                agency: p[0].innerHTML,
-                service: p[1].innerHTML,
-                case: p[2].innerHTML,
-                start: p[3].innerHTML,
-                nature: p[4].innerHTML,
-                address: p[5].innerHTML
-            }
-            calls.push(call);
-            console.log(call);
-        });
-        return calls;
-    });
 }
 
-//Closed Calls Scraping
-async function getClosedCalls(page) {
-    console.log("Getting Closed Dispatch Calls...");
-    await page.goto('http://www.meridenp2c.com/cad/callsnapshot.aspx', { waitUntil: 'networkidle2' });
+async function getCADCalls(){
+    console.log("Getting Current Dispatch Calls...");
+    let calls = [];
 
-    //await page.click('#pager_center > table > tbody > tr > td:nth-child(5) > select');
-    await page.select('#pager_center > table > tbody > tr > td:nth-child(5) > select', '10000');
-    await delay(1000);
-    return await page.evaluate(() => {
-        var rows = Array.from(document.querySelectorAll("#tblDB > tbody> tr"));
-        var calls = [];
-        rows.forEach(element => {
-
-            var p = element.children;
-
-            let call = {
-                agency: p[0].innerHTML,
-                service: p[1].innerHTML,
-                case: p[2].innerHTML,
-                start: p[3].innerHTML,
-                end: p[4].innerHTML,
-                nature: p[5].innerHTML,
-                address: p[6].innerHTML
-            }
-            calls.push(call);
-            console.log(call);
-        });
-        return calls;
-    });
+   return request(activeCallsRequest);
+    
 }
 
 function geocode(address){
@@ -193,6 +232,72 @@ function delay(time) {
  }
 
 crawl();
-// cron.schedule("*/5 * * * *", crawl);
+cron.schedule("*/5 * * * *", crawl);
 
 module.exports = {crawl};
+
+
+
+//############    BACK UP OF OLD PUPPETEER WAY OF SCRAPING   #############
+
+//Active Calls Scraping
+// async function getCADCalls(page) {
+//     console.log("Getting Current Dispatch Calls...");
+
+//     await page.goto('http://www.meridenp2c.com/cad/currentcalls.aspx', { waitUntil: 'networkidle2' });
+//     await page.select('#pager_center > table > tbody > tr > td:nth-child(5) > select', '10000');
+    
+//     // await page.waitForNavigation();
+
+//     return await page.evaluate(() => {
+//         var rows = Array.from(document.querySelectorAll("#tblDB > tbody> tr"));
+//         var calls = [];
+//         rows.forEach(element => {
+
+//             var p = element.children;
+
+//             let call = {
+//                 agency: p[0].innerHTML,
+//                 service: p[1].innerHTML,
+//                 case: p[2].innerHTML,
+//                 start: p[3].innerHTML,
+//                 nature: p[4].innerHTML,
+//                 address: p[5].innerHTML
+//             }
+//             calls.push(call);
+//             console.log(call);
+//         });
+//         return calls;
+//     });
+// }
+
+// //Closed Calls Scraping
+// async function getClosedCalls(page) {
+//     console.log("Getting Closed Dispatch Calls...");
+//     await page.goto('http://www.meridenp2c.com/cad/callsnapshot.aspx', { waitUntil: 'networkidle2' });
+
+//     //await page.click('#pager_center > table > tbody > tr > td:nth-child(5) > select');
+//     await page.select('#pager_center > table > tbody > tr > td:nth-child(5) > select', '10000');
+//     await delay(1000);
+//     return await page.evaluate(() => {
+//         var rows = Array.from(document.querySelectorAll("#tblDB > tbody> tr"));
+//         var calls = [];
+//         rows.forEach(element => {
+
+//             var p = element.children;
+
+//             let call = {
+//                 agency: p[0].innerHTML,
+//                 service: p[1].innerHTML,
+//                 case: p[2].innerHTML,
+//                 start: p[3].innerHTML,
+//                 end: p[4].innerHTML,
+//                 nature: p[5].innerHTML,
+//                 address: p[6].innerHTML
+//             }
+//             calls.push(call);
+//             console.log(call);
+//         });
+//         return calls;
+//     });
+// }
