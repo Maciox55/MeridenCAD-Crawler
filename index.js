@@ -17,26 +17,22 @@ mongoose.connect(process.env.CONNSTRING);
 
 
 const activeCallsRequest = {
-    method: 'POST',
+    method: 'GET',
     url: 'http://www.meridenp2c.com/cad/cadHandler.ashx',
     qs: {op: 's'},
     headers: {
       Accept: 'application/json, text/javascript, */*; q=0.01',
-      'Accept-Language': 'en-US,en;q=0.7',
+      'Accept-Language': 'en-US,en;q=0.9',
       Connection: 'keep-alive',
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      Cookie: 'ASP.NET_SessionId=tinttk55myl0xo5c4tkkhzdj',
-      Origin: 'http://www.meridenp2c.com',
       Referer: 'http://www.meridenp2c.com/cad/currentcalls.aspx',
-      'Sec-GPC': '1',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36',
       'X-Requested-With': 'XMLHttpRequest'
     },
     form: {
       t: 'ccc',
       _search: 'false',
-      nd: '1663908908813',
-      rows: '10000',
+      rows: '1000',
       page: '1',
       sidx: 'starttime',
       sord: 'desc'
@@ -44,26 +40,21 @@ const activeCallsRequest = {
   };
 
   const closedCallsRequest = {
-    method: 'POST',
+    method: 'GET',
     url: 'http://www.meridenp2c.com/cad/cadHandler.ashx',
     qs: {op: 's'},
     headers: {
       Accept: 'application/json, text/javascript, */*; q=0.01',
-      'Accept-Language': 'en-US,en;q=0.7',
-      Connection: 'keep-alive',
+      'Accept-Language': 'en-US,en;q=0.9',
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      Cookie: 'ASP.NET_SessionId=tinttk55myl0xo5c4tkkhzdj',
       Origin: 'http://www.meridenp2c.com',
       Referer: 'http://www.meridenp2c.com/cad/callsnapshot.aspx',
-      'Sec-GPC': '1',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
       'X-Requested-With': 'XMLHttpRequest'
     },
     form: {
       t: 'css',
       _search: 'false',
-      nd: '1663907425468',
-      rows: '10000',
+      rows: '1000',
       page: '1',
       sidx: 'starttime',
       sord: 'desc'
@@ -73,6 +64,7 @@ const activeCallsRequest = {
 
 
 async function crawl() {
+  
     // const browser = await puppeteer.launch({ headless: true, muteAudio: true });
 
     // const page = await browser.newPage();
@@ -86,7 +78,7 @@ async function crawl() {
     // console.log(parsedClosed.rows);
 
 
-    try {
+   
         for (var i = 0; i < parsedActive.rows.length; i++) {
             // console.log(activeCalls[i]);
             let c = {
@@ -120,6 +112,12 @@ async function crawl() {
                 // console.log(geo.geometry);
                 console.log("Active case already in DB");
             } else {
+                if(call.address.includes("CRUISER"))
+                {
+                    call.address =  "50 W MAIN ST, MERIDEN";
+                }
+
+
                 geocode(call.address).then((geo)=>{
                     // console.log(geo.data.results[0].geometry);
                     call.coordinates.latitude = geo.data.results[0].geometry.location.lat;
@@ -174,11 +172,8 @@ async function crawl() {
             // console.log(call);
             // await browser.close();
         }
-    } catch(e) {
-        console.log(e);
-        // await browser.close();
-    }
 
+   
 };
 
 async function getClosedCalls(){
@@ -231,8 +226,10 @@ function delay(time) {
     });
  }
 
+
 crawl();
-cron.schedule("*/5 * * * *", crawl);
+
+// cron.schedule("*/5 * * * *", crawl);
 
 module.exports = {crawl};
 
